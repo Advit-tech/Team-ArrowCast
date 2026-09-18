@@ -3,26 +3,7 @@
 ## 1. System Topology
 
 The system uses a 3-node decentralized edge architecture communicating over MQTT via a local Wi-Fi broker.
-              ┌──────────────────────────────┐
-              │    Admin Node (ESP32-S3)     │
-              │  - AsyncWebServer Dashboard  │
-              │  - Decision Engine Logic     │
-              │  - Local MQTT Broker Host    │
-              └──────────────┬───────────────┘
-                             │
-       ┌─────────────────────┴─────────────────────┐
-       │ MQTT Topics (farm/sensor/* & farm/tank/*)  │
-       └──────────────┬────────────────────┬───────┘
-                      │                    │
-                      ▼                    ▼
-   ┌──────────────────────┐    ┌──────────────────────┐
-   │     Sensor Node      │    │      Tank Node       │
-   │  - ESP32 / ESP8266   │    │  - Standard ESP32    │
-   │  - Soil Moisture Pin │    │  - Multi-Zone Relays │
-   │  - DHT22 (Temp/Hum)  │    │  - HC-SR04 Water Level│
-   └──────────────────────┘    └──────────────────────┘
-
-   ## 2. Node Breakdown & Responsibilities
+## 2. Node Breakdown & Responsibilities
 
 ### A. Admin Node (`/firmware/admin_node/`)
 - **Hardware:** ESP32-S3
