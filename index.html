@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Fieldline — Irrigation Control</title>
+<style>
+  :root{
+    --bg:#1B1712;
+    --panel:#241F17;
+    --panel-alt:#2C261C;
+    --line:#3A3226;
+    --text:#EDE6D6;
+    --text-dim:#A69A83;
+    --water:#4FA6A0;
+    --water-dim:#2E5F5C;
+    --wheat:#D3A24C;
+    --rust:#C1502F;
+    --leaf:#7FA24A;
+    --radius:3px;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  html[data-theme="light"]{
+    --bg:#F3EFE4;
+    --panel:#FFFFFF;
+    --panel-alt:#EAE3D3;
+    --line:#D8CDB3;
+    --text:#241F17;
+    --text-dim:#6B5F49;
+    --water-dim:#CDE7E5;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:var(--sans);
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;}
+  button{font-family:inherit; cursor:pointer;}
+  :focus-visible{outline:2px solid var(--water); outline-offset:2px;}
+
+  /* ---------- shell ---------- */
+  .shell{display:flex; min-height:100vh;}
+  .rail{
+    width:198px; flex-shrink:0;
+    background:var(--panel); border-right:1px solid var(--line);
+    display:flex; flex-direction:column;
+    padding:18px 0;
+  }
+  .brand{
+    padding:0 18px 16px; margin-bottom:8px;
+    border-bottom:1px solid var(--line);
+  }
+  .brand-mark{font-size:15px; font-weight:700; letter-spacing:-0.01em;}
+  .brand-sub{font-size:11px; color:var(--text-dim); font-family:var(--mono); margin-top:3px;}
+  .nav-group{padding:14px 18px 6px; font-size:11px; color:var(--text-dim); font-family:var(--mono);}
+  .nav-item{
+    display:flex; align-items:center; gap:9px;
+    padding:8px 18px; font-size:13.5px;
+    color:var(--text-dim); cursor:pointer;
+    border-left:2px solid transparent;
+  }
+  .nav-item:hover{color:var(--text);}
+  .nav-item.active{
+    color:var(--text); border-left-color:var(--water);
+    background:var(--panel-alt);
+  }
+  .dot{width:7px; height:7px; border-radius:50%; flex-shrink:0;}
+  .dot.on{background:var(--leaf);}
+  .dot.off{background:var(--text-dim);}
+  .dot.warn{background:var(--wheat);}
+  .dot.crit{background:var(--rust);}
+  .rail-foot{margin-top:auto; padding:12px 18px 0; border-top:1px solid var(--line);}
+  .theme-toggle{
+    width:100%; padding:7px 0; font-size:12px; font-family:var(--mono);
+    background:none; border:1px solid var(--line); color:var(--text-dim);
+    border-radius:var(--radius);
+  }
+  .theme-toggle:hover{color:var(--text); border-color:var(--text-dim);}
+
+  .main{flex:1; min-width:0; padding:20px 26px 40px;}
+
+  /* ---------- header ---------- */
+  .topbar{
+    display:flex; justify-content:space-between; align-items:baseline;
+    margin-bottom:18px; flex-wrap:wrap; gap:8px;
+  }
+  .topbar h1{font-size:19px; font-weight:600;}
+  .conn{
+    font-family:var(--mono); font-size:12px; color:var(--text-dim);
+    display:flex; align-items:center; gap:14px;
+  }
+  .conn b{color:var(--text); font-weight:600;}
+  .pill{
+    display:inline-flex; align-items:center; gap:6px;
+    padding:3px 9px; border-radius:99px; font-size:11.5px;
+    background:var(--panel-alt); border:1px solid var(--line);
+  }
+  .pill .dot{width:6px; height:6px;}
+
+  /* ---------- resource strip ---------- */
+  .resources{
+    display:grid; grid-template-columns:repeat(5, 1fr); gap:1px;
+    background:var(--line); border:1px solid var(--line);
+    border-radius:var(--radius); overflow:hidden;
+    margin-bottom:22px;
+  }
+  .res-cell{background:var(--panel); padding:11px 14px;}
+  .res-label{font-size:10.5px; color:var(--text-dim); font-family:var(--mono); text-transform:lowercase;}
+  .res-value{font-family:var(--mono); font-size:18px; margin-top:3px; font-weight:600;}
+  .res-value small{font-size:11px; color:var(--text-dim); font-weight:400;}
+  .res-bar{height:3px; background:var(--panel-alt); margin-top:7px; border-radius:2px; overflow:hidden;}
+  .res-bar i{display:block; height:100%; background:var(--water); border-radius:2px;}
+  .res-bar i.warn{background:var(--wheat);}
+  .res-bar i.crit{background:var(--rust);}
+
+  /* ---------- section headings ---------- */
+  .section-head{
+    display:flex; justify-content:space-between; align-items:center;
+    margin:26px 0 10px;
+  }
+  .section-head h2{font-size:13px; font-family:var(--mono); color:var(--text-dim); font-weight:500;}
+  .section-head .hint{font-size:11.5px; color:var(--text-dim);}
+
+  /* ---------- zone cards ---------- */
+  .zones{display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:12px;}
+  .zone-card{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:14px 16px 15px;
+  }
+  .zone-card.offline{opacity:0.55;}
+  .zone-top{display:flex; justify-content:space-between; align-items:center; margin-bottom:11px;}
+  .zone-name{font-weight:600; font-size:14.5px;}
+  .zone-mode{font-family:var(--mono); font-size:10.5px; color:var(--text-dim);}
+  .zone-mode.manual{color:var(--wheat);}
+  .metric-row{display:flex; justify-content:space-between; padding:5px 0; border-top:1px solid var(--line); font-size:12.5px;}
+  .metric-row:first-of-type{border-top:none;}
+  .metric-row .k{color:var(--text-dim);}
+  .metric-row .v{font-family:var(--mono);}
+  .metric-row .v.low{color:var(--rust);}
+  .valve-row{
+    display:flex; justify-content:space-between; align-items:center;
+    margin-top:12px; padding-top:11px; border-top:1px solid var(--line);
+  }
+  .valve-state{font-family:var(--mono); font-size:12.5px; display:flex; align-items:center; gap:6px;}
+  .switch{
+    position:relative; width:38px; height:20px; border-radius:99px;
+    background:var(--panel-alt); border:1px solid var(--line); flex-shrink:0;
+  }
+  .switch i{
+    position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%;
+    background:var(--text-dim); transition:transform .15s ease, background .15s ease;
+  }
+  .switch.on i{transform:translateX(17px); background:var(--leaf);}
+  .valve-actions{display:flex; gap:6px; margin-top:9px;}
+  .btn-sm{
+    flex:1; font-size:11px; font-family:var(--mono); padding:6px 0;
+    background:none; border:1px solid var(--line); color:var(--text-dim); border-radius:var(--radius);
+  }
+  .btn-sm:hover{color:var(--text); border-color:var(--text-dim);}
+  .btn-sm.active{background:var(--water-dim); color:var(--water); border-color:var(--water);}
+
+  /* ---------- chart + log layout ---------- */
+  .split{display:grid; grid-template-columns:1.3fr 1fr; gap:14px; align-items:start;}
+  @media (max-width:880px){.split{grid-template-columns:1fr;}}
+
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:16px;}
+  .panel-title{font-size:12.5px; font-family:var(--mono); color:var(--text-dim); margin-bottom:10px; display:flex; justify-content:space-between;}
+  select.zone-select{
+    background:var(--panel-alt); color:var(--text); border:1px solid var(--line);
+    font-family:var(--mono); font-size:11.5px; padding:3px 6px; border-radius:var(--radius);
+  }
+  canvas{width:100%; display:block;}
+
+  .log-list{max-height:260px; overflow-y:auto; display:flex; flex-direction:column; gap:0;}
+  .log-row{
+    display:grid; grid-template-columns:64px 46px 1fr; gap:10px;
+    padding:8px 0; border-top:1px solid var(--line); font-size:12px;
+  }
+  .log-row:first-child{border-top:none;}
+  .log-time{color:var(--text-dim); font-family:var(--mono); font-size:11px;}
+  .log-zone{font-family:var(--mono); font-size:11px; color:var(--water);}
+  .log-reason{color:var(--text);}
+  .log-reason.skip{color:var(--text-dim);}
+
+  /* ---------- config + tank ---------- */
+  .bottom-grid{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:26px;}
+  @media (max-width:880px){.bottom-grid{grid-template-columns:1fr;}}
+  .field-row{display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-top:1px solid var(--line); gap:10px;}
+  .field-row:first-child{border-top:none;}
+  .field-row label{font-size:12.5px; color:var(--text-dim);}
+  .field-row input[type=number], .field-row input[type=range]{
+    background:var(--panel-alt); border:1px solid var(--line); color:var(--text);
+    font-family:var(--mono); font-size:12.5px; padding:5px 7px; border-radius:var(--radius);
+    width:70px;
+  }
+  .save-btn{
+    margin-top:12px; width:100%; padding:9px 0; font-size:12.5px; font-family:var(--mono);
+    background:var(--water-dim); color:var(--water); border:1px solid var(--water);
+    border-radius:var(--radius);
+  }
+  .save-btn:hover{filter:brightness(1.1);}
+  .tank-gauge{
+    height:130px; border:1px solid var(--line); border-radius:var(--radius);
+    background:var(--panel-alt); position:relative; overflow:hidden; margin-bottom:12px;
+  }
+  .tank-fill{
+    position:absolute; bottom:0; left:0; right:0; background:var(--water-dim);
+    border-top:2px solid var(--water); transition:height .4s ease;
+  }
+  .tank-pct{
+    position:relative; z-index:1; height:100%; display:flex; align-items:center; justify-content:center;
+    font-family:var(--mono); font-size:26px; font-weight:600;
+  }
+  .banner{
+    display:none; align-items:center; gap:8px; padding:8px 12px; margin-bottom:12px;
+    background:rgba(193,80,47,0.12); border:1px solid var(--rust); color:var(--rust);
+    border-radius:var(--radius); font-size:12px; font-family:var(--mono);
+  }
+  .banner.show{display:flex;}
+
+  .toast{
+    position:fixed; bottom:20px; right:20px; background:var(--panel); border:1px solid var(--line);
+    padding:10px 16px; border-radius:var(--radius); font-size:12.5px; font-family:var(--mono);
+    box-shadow:0 4px 20px rgba(0,0,0,0.3); opacity:0; transform:translateY(6px);
+    transition:opacity .2s, transform .2s; pointer-events:none;
+  }
+  .toast.show{opacity:1; transform:translateY(0);}
+
+  .mock-flag{
+    font-family:var(--mono); font-size:10.5px; color:var(--wheat);
+    border:1px solid var(--wheat); padding:1px 7px; border-radius:99px; display:none;
+  }
+  .mock-flag.show{display:inline-flex;}
+
+  /* ---------- weather panel ---------- */
+  .weather-now{display:flex; align-items:baseline; gap:10px; margin-bottom:14px;}
+  .weather-temp{font-family:var(--mono); font-size:32px; font-weight:600;}
+  .weather-cond{font-size:13px; color:var(--text-dim);}
+  .weather-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:16px;}
+  .weather-stat{background:var(--panel-alt); border:1px solid var(--line); border-radius:var(--radius); padding:8px 10px;}
+  .weather-stat .wl{font-size:10px; color:var(--text-dim); font-family:var(--mono);}
+  .weather-stat .wv{font-family:var(--mono); font-size:14px; margin-top:3px;}
+  .rain-label{font-size:10.5px; color:var(--text-dim); font-family:var(--mono); margin-bottom:6px;}
+  .rain-bars{display:flex; gap:3px; height:46px; margin-bottom:4px;}
+  .rain-bar{flex:1; height:100%; background:var(--panel-alt); border-radius:2px; display:flex; align-items:flex-end; overflow:hidden;}
+  .rain-bar i{display:block; width:100%; background:var(--water); border-radius:2px 2px 0 0;}
+  .rain-bar.high i{background:var(--rust);}
+  .rain-hours{display:flex; justify-content:space-between; font-size:9.5px; color:var(--text-dim); font-family:var(--mono);}
+  .override-badge{
+    display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:11px;
+    color:var(--wheat); border:1px solid var(--wheat); padding:4px 9px; border-radius:99px; margin-top:12px;
+  }
+
+  /* ---------- ai predictor panel ---------- */
+  .predict-row{padding:10px 0; border-top:1px solid var(--line);}
+  .predict-row:first-child{border-top:none;}
+  .predict-top{display:flex; justify-content:space-between; align-items:baseline; font-size:12.5px; margin-bottom:6px;}
+  .predict-zone{font-weight:600;}
+  .predict-pct{font-family:var(--mono);}
+  .confidence{font-size:10px; color:var(--text-dim); margin-left:4px;}
+  .predict-bar{height:6px; background:var(--panel-alt); border-radius:3px; overflow:hidden;}
+  .predict-bar i{display:block; height:100%; background:var(--leaf); border-radius:3px;}
+  .predict-bar i.med{background:var(--wheat);}
+  .predict-bar i.high{background:var(--rust);}
+  .predict-note{font-size:11px; color:var(--text-dim); margin-top:6px;}
+
+  @media (max-width:720px){
+    .shell{flex-direction:column;}
+    .rail{width:100%; flex-direction:row; overflow-x:auto; padding:10px 0;}
+    .brand, .rail-foot, .nav-group{display:none;}
+    .nav-item{border-left:none; border-bottom:2px solid transparent; white-space:nowrap;}
+    .nav-item.active{border-bottom-color:var(--water);}
+    .resources{grid-template-columns:repeat(2,1fr);}
+    .main{padding:16px;}
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{transition:none !important;}
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <nav class="rail">
+    <div class="brand">
+      <div class="brand-mark">FIELDLINE</div>
+      <div class="brand-sub">admin · esp32-s3</div>
+    </div>
+    <div class="nav-group">nodes</div>
+    <div class="nav-item active" data-view="overview"><span class="dot on"></span> Overview</div>
+    <div class="nav-item" data-view="config"><span class="dot off"></span> Configuration</div>
+    <div class="nav-item" data-view="resources"><span class="dot off"></span> Device resources</div>
+    <div class="nav-group">zones</div>
+    <div id="zoneNav"></div>
+    <div class="rail-foot">
+      <button class="theme-toggle" id="themeToggle">light mode</button>
+    </div>
+  </nav>
+
+  <main class="main">
+    <div class="topbar">
+      <h1>Field control</h1>
+      <div class="conn">
+        <span class="mock-flag" id="mockFlag">demo data</span>
+        <span class="pill"><span class="dot" id="connDot"></span> <span id="connText">connecting…</span></span>
+        <span>uptime <b id="uptimeVal">—</b></span>
+      </div>
+    </div>
+
+    <div class="banner" id="tankBanner">⚠ Tank level low — irrigation may be suspended on affected zones</div>
+
+    <div class="resources" id="resourceStrip"></div>
+
+    <div class="section-head">
+      <h2>zones</h2>
+      <span class="hint" id="zoneSummary"></span>
+    </div>
+    <div class="zones" id="zoneGrid"></div>
+
+    <div class="section-head"><h2>history &amp; log</h2></div>
+    <div class="split">
+      <div class="panel">
+        <div class="panel-title">
+          <span>soil moisture, last 6h</span>
+          <select class="zone-select" id="chartZoneSelect"></select>
+        </div>
+        <canvas id="historyChart" height="160"></canvas>
+      </div>
+      <div class="panel">
+        <div class="panel-title"><span>decision log</span><span id="logCount"></span></div>
+        <div class="log-list" id="logList"></div>
+      </div>
+    </div>
+
+    <div class="section-head"><h2>weather &amp; ai forecast</h2></div>
+    <div class="split">
+      <div class="panel">
+        <div class="panel-title"><span>weather</span><span id="weatherUpdated"></span></div>
+        <div class="weather-now">
+          <div class="weather-temp" id="wxTemp">—</div>
+          <div class="weather-cond" id="wxCond">—</div>
+        </div>
+        <div class="weather-grid">
+          <div class="weather-stat"><div class="wl">rain, 24h</div><div class="wv" id="wxRainVol">—</div></div>
+          <div class="weather-stat"><div class="wl">humidity</div><div class="wv" id="wxHumidity">—</div></div>
+          <div class="weather-stat"><div class="wl">wind</div><div class="wv" id="wxWind">—</div></div>
+        </div>
+        <div class="rain-label">rain probability, next 12h</div>
+        <div class="rain-bars" id="rainBars"></div>
+        <div class="rain-hours"><span>now</span><span>+6h</span><span>+12h</span></div>
+        <div id="wxOverrideBadge"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title"><span>ai irrigation predictor</span><span class="hint">need, next 3h</span></div>
+        <div id="predictList"></div>
+      </div>
+    </div>
+
+    <div class="bottom-grid">
+      <div class="panel">
+        <div class="panel-title"><span>tank</span></div>
+        <div class="tank-gauge"><div class="tank-fill" id="tankFill" style="height:0%"></div><div class="tank-pct" id="tankPct">—</div></div>
+        <div class="metric-row"><span class="k">Pump draw</span><span class="v" id="tankPump">—</span></div>
+        <div class="metric-row"><span class="k">Last refill</span><span class="v" id="tankRefill">—</span></div>
+      </div>
+      <div class="panel" id="configPanel">
+        <div class="panel-title"><span>thresholds &amp; weather sensitivity</span></div>
+        <div id="configFields"></div>
+        <button class="save-btn" id="saveConfig">Save configuration</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ======================================================================
+   CONFIG — endpoints the ESP32 / backend must implement. See bottom
+   of the accompanying setup notes for exact JSON shapes.
+====================================================================== */
+const API = {
+  zones:     '/api/zones',
+  history:   (zone) => `/api/history?zone=${zone}`,
+  override:  '/api/override',
+  tank:      '/api/tank',
+  logs:      '/api/logs',
+  config:    '/api/config',
+  resources: '/api/resources',
+  weather:   '/api/weather',
+  predict:   '/api/predict'
+};
+const POLL_MS = 6000;
+
+/* ---------------------------------------------------------------------
+   State
+--------------------------------------------------------------------- */
+let state = {
+  zones: [],
+  tank: null,
+  logs: [],
+  resources: null,
+  config: null,
+  selectedChartZone: null,
+  usingMock: false,
+  connected: false,
+  weather: null,
+  predictions: []
+};
+
+/* ---------------------------------------------------------------------
+   Mock data generator — keeps the UI alive and demo-able if the
+   ESP32/backend isn't reachable yet. Real fetches always take priority.
+--------------------------------------------------------------------- */
+function mockZones(){
+  const names = ['North bed','South bed','Greenhouse','Row 4'];
+  return names.map((n,i)=>({
+    id:'z'+(i+1), name:n,
+    soil: Math.round(20 + Math.sin(Date.now()/9000+i)*15 + 25),
+    temp: Math.round((26 + Math.sin(Date.now()/15000+i)*4)*10)/10,
+    humidity: Math.round(55 + Math.cos(Date.now()/12000+i)*10),
+    valve: (Math.sin(Date.now()/9000+i) < -0.4),
+    mode: i===2 ? 'manual' : 'auto',
+    online: i!==3 || (Date.now()/1000)%20 < 15,
+    last_seen: Math.floor(Date.now()/1000) - (i===3 ? 40 : Math.floor(Math.random()*8))
+  }));
+}
+function mockHistory(){
+  const pts=[]; const now=Date.now();
+  for(let i=36;i>=0;i--){
+    pts.push({ts: Math.floor((now - i*10*60*1000)/1000), soil: Math.round(30 + Math.sin(i/4)*14 + Math.random()*3)});
+  }
+  return pts;
+}
+function mockTank(){ return {level: 62, low: false, pump_draw_w: 38, last_refill: Math.floor(Date.now()/1000)-3600*14}; }
+function mockLogs(){
+  return [
+    {ts: Math.floor(Date.now()/1000)-120, zone:'z1', action:'watered', reason:'soil 21% < threshold 30%, no rain forecast'},
+    {ts: Math.floor(Date.now()/1000)-900, zone:'z2', action:'skipped', reason:'rain expected 65% within 3h'},
+    {ts: Math.floor(Date.now()/1000)-2200, zone:'z3', action:'manual on', reason:'override set by operator'},
+    {ts: Math.floor(Date.now()/1000)-4100, zone:'z4', action:'offline', reason:'no heartbeat for 40s'},
+  ];
+}
+function mockResources(){
+  return {
+    heap_free: 148000, heap_total: 327680,
+    cpu_load_pct: 34, loop_hz: 62,
+    flash_used: 812000, flash_total: 4194304,
+    wifi_rssi: -58, uptime_s: 51340
+  };
+}
+function mockConfig(){
+  return { rain_sensitivity: 60, zones:{ z1:{threshold:30}, z2:{threshold:35}, z3:{threshold:28}, z4:{threshold:32} } };
+}
+function mockWeather(){
+  const hourly = [];
+  for(let i=0;i<12;i++){
+    hourly.push(Math.round(8 + Math.random()*18 + (i>4 && i<8 ? 42 : 0)));
+  }
+  return {
+    temp: Math.round((25 + Math.sin(Date.now()/40000)*3)*10)/10,
+    condition: 'Partly cloudy',
+    humidity: 58,
+    wind_kph: 11,
+    rain_mm_24h: 2.4,
+    hourly_rain_prob: hourly,
+    updated: Math.floor(Date.now()/1000) - 300,
+    override_active: hourly.slice(0,3).some(p => p > 60)
+  };
+}
+// Takes the just-fetched zones (not state.zones) so it never lags a cycle behind.
+function mockPredictions(zones){
+  return (zones||[]).map(z => {
+    const probability = Math.max(4, Math.min(96, Math.round((100 - z.soil) * 0.8 + (Math.random()*10-5))));
+    return {
+      zone: z.id, name: z.name, probability,
+      confidence: Math.round(72 + Math.random()*18),
+      note: probability > 65
+        ? 'soil trending down, low rainfall in recent window'
+        : probability > 35
+          ? 'soil stable, watch next 2–3 readings'
+          : 'soil comfortably above threshold'
+    };
+  });
+}
+
+/* ---------------------------------------------------------------------
+   Fetch helpers — fall back to mock on any failure, so the dashboard
+   never goes blank mid-demo.
+--------------------------------------------------------------------- */
+async function tryFetch(url, mockFn){
+  try{
+    const res = await fetch(url, {cache:'no-store'});
+    if(!res.ok) throw new Error(res.status);
+    state.usingMock = false;
+    return await res.json();
+  }catch(e){
+    state.usingMock = true;
+    return mockFn();
+  }
+}
+
+async function refreshAll(){
+  const [zones, tank, logs, resources, config, weather] = await Promise.all([
+    tryFetch(API.zones, mockZones),
+    tryFetch(API.tank, mockTank),
+    tryFetch(API.logs, mockLogs),
+    tryFetch(API.resources, mockResources),
+    state.config ? Promise.resolve(state.config) : tryFetch(API.config, mockConfig),
+    tryFetch(API.weather, mockWeather)
+  ]);
+  state.zones = zones; state.tank = tank; state.logs = logs;
+  state.resources = resources; state.config = config; state.weather = weather;
+  state.predictions = await tryFetch(API.predict, () => mockPredictions(zones));
+  if(!state.selectedChartZone && zones.length) state.selectedChartZone = zones[0].id;
+  state.connected = true;
+  renderAll();
+  refreshHistory();
+}
+
+async function refreshHistory(){
+  if(!state.selectedChartZone) return;
+  const hist = await tryFetch(API.history(state.selectedChartZone), mockHistory);
+  drawChart(hist);
+}
+
+/* ---------------------------------------------------------------------
+   Render
+--------------------------------------------------------------------- */
+function fmtTime(ts){
+  const d = new Date(ts*1000);
+  return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+}
+function fmtAgo(ts){
+  const s = Math.floor(Date.now()/1000) - ts;
+  if(s < 60) return s+'s ago';
+  if(s < 3600) return Math.floor(s/60)+'m ago';
+  return Math.floor(s/3600)+'h ago';
+}
+function fmtUptime(s){
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60);
+  return `${h}h ${m}m`;
+}
+
+function renderConn(){
+  const dot = document.getElementById('connDot');
+  const text = document.getElementById('connText');
+  dot.className = 'dot ' + (state.connected ? 'on' : 'crit');
+  text.textContent = state.connected ? (state.usingMock ? 'demo mode' : 'live') : 'offline';
+  document.getElementById('mockFlag').classList.toggle('show', state.usingMock);
+  if(state.resources) document.getElementById('uptimeVal').textContent = fmtUptime(state.resources.uptime_s);
+}
+
+function renderResources(){
+  const r = state.resources; if(!r) return;
+  const heapPct = Math.round((1 - r.heap_free/r.heap_total)*100);
+  const flashPct = Math.round((r.flash_used/r.flash_total)*100);
+  const cells = [
+    {label:'heap used', value: heapPct+'%', sub:`${(r.heap_free/1024).toFixed(0)}kb free`, pct:heapPct},
+    {label:'cpu load', value: r.cpu_load_pct+'%', sub:`${r.loop_hz}hz loop`, pct:r.cpu_load_pct},
+    {label:'flash used', value: flashPct+'%', sub:`${(r.flash_used/1024).toFixed(0)}kb / ${(r.flash_total/1024).toFixed(0)}kb`, pct:flashPct},
+    {label:'wifi signal', value: r.wifi_rssi+' dbm', sub: r.wifi_rssi > -60 ? 'strong' : r.wifi_rssi > -75 ? 'fair' : 'weak', pct: Math.min(100, Math.max(0, (r.wifi_rssi+90)*2))},
+    {label:'uptime', value: fmtUptime(r.uptime_s), sub:'since last boot', pct:null},
+  ];
+  document.getElementById('resourceStrip').innerHTML = cells.map(c => `
+    <div class="res-cell">
+      <div class="res-label">${c.label}</div>
+      <div class="res-value">${c.value} <small>${c.sub}</small></div>
+      ${c.pct!==null ? `<div class="res-bar"><i class="${c.pct>85?'crit':c.pct>65?'warn':''}" style="width:${c.pct}%"></i></div>` : ''}
+    </div>`).join('');
+}
+
+function renderZoneNav(){
+  document.getElementById('zoneNav').innerHTML = state.zones.map(z => {
+    const cls = !z.online ? 'crit' : z.valve ? 'on' : 'off';
+    return `<div class="nav-item" data-zone="${z.id}"><span class="dot ${cls}"></span> ${z.name}</div>`;
+  }).join('');
+}
+
+function renderZones(){
+  const grid = document.getElementById('zoneGrid');
+  grid.innerHTML = state.zones.map(z => {
+    const low = z.soil < (state.config?.zones?.[z.id]?.threshold ?? 30);
+    return `
+    <div class="zone-card ${!z.online ? 'offline' : ''}">
+      <div class="zone-top">
+        <div class="zone-name">${z.name}</div>
+        <div class="zone-mode ${z.mode==='manual'?'manual':''}">${z.online ? (z.mode==='manual' ? 'manual' : 'auto') : 'offline'}</div>
+      </div>
+      <div class="metric-row"><span class="k">Soil moisture</span><span class="v ${low?'low':''}">${z.soil}%</span></div>
+      <div class="metric-row"><span class="k">Temperature</span><span class="v">${z.temp}°C</span></div>
+      <div class="metric-row"><span class="k">Humidity</span><span class="v">${z.humidity}%</span></div>
+      <div class="metric-row"><span class="k">Last seen</span><span class="v">${fmtAgo(z.last_seen)}</span></div>
+      <div class="valve-row">
+        <div class="valve-state"><span class="dot ${z.valve?'on':'off'}"></span> valve ${z.valve ? 'open' : 'closed'}</div>
+        <div class="switch ${z.valve?'on':''}" data-toggle="${z.id}" role="button" tabindex="0" aria-label="toggle valve"><i></i></div>
+      </div>
+      <div class="valve-actions">
+        <button class="btn-sm ${z.mode!=='manual'?'active':''}" data-mode="${z.id}:auto">auto</button>
+        <button class="btn-sm ${z.mode==='manual'?'active':''}" data-mode="${z.id}:manual">manual</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  const onCount = state.zones.filter(z=>z.valve).length;
+  const offlineCount = state.zones.filter(z=>!z.online).length;
+  document.getElementById('zoneSummary').textContent =
+    `${state.zones.length} zones · ${onCount} watering` + (offlineCount ? ` · ${offlineCount} offline` : '');
+}
+
+function renderLogs(){
+  const list = document.getElementById('logList');
+  document.getElementById('logCount').textContent = state.logs.length + ' events';
+  list.innerHTML = state.logs.map(l => `
+    <div class="log-row">
+      <div class="log-time">${fmtTime(l.ts)}</div>
+      <div class="log-zone">${l.zone}</div>
+      <div class="log-reason ${l.action==='skipped'||l.action==='offline'?'skip':''}"><b>${l.action}</b> — ${l.reason}</div>
+    </div>`).join('');
+}
+
+function renderTank(){
+  const t = state.tank; if(!t) return;
+  document.getElementById('tankFill').style.height = t.level + '%';
+  document.getElementById('tankPct').textContent = t.level + '%';
+  document.getElementById('tankPump').textContent = t.pump_draw_w + ' W';
+  document.getElementById('tankRefill').textContent = fmtAgo(t.last_refill);
+  document.getElementById('tankBanner').classList.toggle('show', t.low || t.level < 15);
+}
+
+function renderConfig(){
+  const c = state.config; if(!c) return;
+  const zoneFields = state.zones.map(z => `
+    <div class="field-row">
+      <label>${z.name} threshold</label>
+      <input type="number" min="0" max="100" data-cfg-zone="${z.id}" value="${c.zones?.[z.id]?.threshold ?? 30}"> %
+    </div>`).join('');
+  document.getElementById('configFields').innerHTML = zoneFields + `
+    <div class="field-row">
+      <label>Rain sensitivity</label>
+      <input type="number" min="0" max="100" id="cfgRain" value="${c.rain_sensitivity ?? 60}"> %
+    </div>`;
+
+  const select = document.getElementById('chartZoneSelect');
+  const prevVal = select.value;
+  select.innerHTML = state.zones.map(z => `<option value="${z.id}">${z.name}</option>`).join('');
+  if(prevVal) select.value = prevVal;
+}
+
+function renderWeather(){
+  const w = state.weather; if(!w) return;
+  document.getElementById('wxTemp').textContent = w.temp + '°C';
+  document.getElementById('wxCond').textContent = w.condition;
+  document.getElementById('wxRainVol').textContent = w.rain_mm_24h + ' mm';
+  document.getElementById('wxHumidity').textContent = w.humidity + '%';
+  document.getElementById('wxWind').textContent = w.wind_kph + ' km/h';
+  document.getElementById('weatherUpdated').textContent = 'updated ' + fmtAgo(w.updated);
+
+  const maxP = Math.max(...w.hourly_rain_prob, 10);
+  document.getElementById('rainBars').innerHTML = w.hourly_rain_prob.map(p =>
+    `<div class="rain-bar ${p>60?'high':''}"><i style="height:${Math.max(6,(p/maxP)*100)}%"></i></div>`
+  ).join('');
+
+  document.getElementById('wxOverrideBadge').innerHTML = w.override_active
+    ? `<div class="override-badge">⚠ rain override active — auto-watering paused on affected zones</div>`
+    : '';
+}
+
+function renderPredictions(){
+  const preds = state.predictions || [];
+  document.getElementById('predictList').innerHTML = preds.map(p => {
+    const cls = p.probability > 65 ? 'high' : p.probability > 35 ? 'med' : '';
+    return `
+    <div class="predict-row">
+      <div class="predict-top">
+        <span class="predict-zone">${p.name}</span>
+        <span class="predict-pct">${p.probability}%<span class="confidence">±${100-p.confidence}</span></span>
+      </div>
+      <div class="predict-bar"><i class="${cls}" style="width:${p.probability}%"></i></div>
+      <div class="predict-note">${p.note}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderAll(){
+  renderConn();
+  renderResources();
+  renderZoneNav();
+  renderZones();
+  renderLogs();
+  renderTank();
+  renderConfig();
+  renderWeather();
+  renderPredictions();
+}
+
+/* ---------------------------------------------------------------------
+   Chart — plain canvas line chart, no dependencies
+--------------------------------------------------------------------- */
+function drawChart(points){
+  const canvas = document.getElementById('historyChart');
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight || 160;
+  canvas.width = w*dpr; canvas.height = h*dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr,dpr);
+  ctx.clearRect(0,0,w,h);
+  if(!points.length) return;
+
+  const pad = 24;
+  const vals = points.map(p=>p.soil);
+  const min = Math.min(...vals, 0), max = Math.max(...vals, 100);
+  const xStep = (w - pad*2) / (points.length - 1);
+
+  const grid = getComputedStyle(document.documentElement).getPropertyValue('--line').trim();
+  const waterColor = getComputedStyle(document.documentElement).getPropertyValue('--water').trim();
+  const textDim = getComputedStyle(document.documentElement).getPropertyValue('--text-dim').trim();
+
+  ctx.strokeStyle = grid; ctx.lineWidth = 1;
+  for(let i=0;i<=3;i++){
+    const y = pad + (h-pad*2)*i/3;
+    ctx.beginPath(); ctx.moveTo(pad,y); ctx.lineTo(w-pad,y); ctx.stroke();
+  }
+  ctx.fillStyle = textDim; ctx.font = '10px ' + getComputedStyle(document.body).fontFamily;
+  ctx.fillText(max+'%', 2, pad+3);
+  ctx.fillText(min+'%', 2, h-pad+3);
+
+  ctx.beginPath();
+  points.forEach((p,i)=>{
+    const x = pad + i*xStep;
+    const y = pad + (h-pad*2) * (1 - (p.soil-min)/(max-min || 1));
+    i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  });
+  ctx.strokeStyle = waterColor; ctx.lineWidth = 2; ctx.lineJoin='round'; ctx.stroke();
+
+  ctx.lineTo(w-pad, h-pad); ctx.lineTo(pad, h-pad); ctx.closePath();
+  ctx.globalAlpha = 0.12; ctx.fillStyle = waterColor; ctx.fill(); ctx.globalAlpha = 1;
+}
+
+/* ---------------------------------------------------------------------
+   Actions
+--------------------------------------------------------------------- */
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(()=>t.classList.remove('show'), 2400);
+}
+
+async function postJSON(url, body){
+  try{
+    const res = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    if(!res.ok) throw new Error(res.status);
+    return true;
+  }catch(e){
+    showToast('Offline — change queued locally (demo)');
+    return false;
+  }
+}
+
+document.addEventListener('click', async (e)=>{
+  const toggle = e.target.closest('[data-toggle]');
+  if(toggle){
+    const id = toggle.dataset.toggle;
+    const z = state.zones.find(z=>z.id===id);
+    z.valve = !z.valve;
+    renderZones();
+    await postJSON(API.override, {zone:id, valve: z.valve, mode: z.mode});
+    return;
+  }
+  const modeBtn = e.target.closest('[data-mode]');
+  if(modeBtn){
+    const [id, mode] = modeBtn.dataset.mode.split(':');
+    const z = state.zones.find(z=>z.id===id);
+    z.mode = mode;
+    renderZones();
+    showToast(`${z.name} set to ${mode}`);
+    await postJSON(API.override, {zone:id, mode});
+    return;
+  }
+  const navZone = e.target.closest('[data-zone]');
+  if(navZone){
+    state.selectedChartZone = navZone.dataset.zone;
+    document.getElementById('chartZoneSelect').value = state.selectedChartZone;
+    refreshHistory();
+    return;
+  }
+});
+
+document.getElementById('chartZoneSelect').addEventListener('change', (e)=>{
+  state.selectedChartZone = e.target.value;
+  refreshHistory();
+});
+
+document.getElementById('saveConfig').addEventListener('click', async ()=>{
+  const zones = {};
+  document.querySelectorAll('[data-cfg-zone]').forEach(input=>{
+    zones[input.dataset.cfgZone] = {threshold: Number(input.value)};
+  });
+  const rain_sensitivity = Number(document.getElementById('cfgRain').value);
+  const payload = {zones, rain_sensitivity};
+  const ok = await postJSON(API.config, payload);
+  state.config = {...state.config, ...payload};
+  showToast(ok ? 'Configuration saved' : 'Saved locally — will sync when online');
+});
+
+document.getElementById('themeToggle').addEventListener('click', ()=>{
+  const html = document.documentElement;
+  const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  html.setAttribute('data-theme', next);
+  document.getElementById('themeToggle').textContent = next === 'dark' ? 'light mode' : 'dark mode';
+  refreshHistory(); // repaint chart with new theme colors
+});
+
+/* nav view switching (overview / config / resources) is intentionally
+   soft-scroll on this single-page layout — sections are always visible,
+   this just focuses attention */
+document.querySelectorAll('.nav-item[data-view]').forEach(item=>{
+  item.addEventListener('click', ()=>{
+    document.querySelectorAll('.nav-item[data-view]').forEach(i=>i.classList.remove('active'));
+    item.classList.add('active');
+    const map = {overview:'.zones', config:'#configPanel', resources:'#resourceStrip'};
+    document.querySelector(map[item.dataset.view])?.scrollIntoView({behavior:'smooth', block:'start'});
+  });
+});
+
+/* respect system light/dark on first load if no explicit choice made */
+if(window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches){
+  document.documentElement.setAttribute('data-theme','light');
+  document.getElementById('themeToggle').textContent = 'dark mode';
+}
+
+/* ---------------------------------------------------------------------
+   Boot
+--------------------------------------------------------------------- */
+refreshAll();
+setInterval(refreshAll, POLL_MS);
+window.addEventListener('resize', ()=>refreshHistory());
+</script>
+</body>
+</html>
